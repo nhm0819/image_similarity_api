@@ -1,0 +1,81 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: faiss-api
+  labels:
+    networking.knative.dev/visibility: cluster-local
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/min-scale: "1"
+        autoscaling.knative.dev/max-scale: "1"
+    spec:
+      containers:
+        - name: faiss-api
+          image: gcr.io/crowdworks-aiml-ops/faiss-api:v4
+          resources:
+            requests:
+              cpu: 2
+              memory: 12Gi
+          ports:
+            - containerPort: 8000
+          env:
+          # DB
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: mlworks-db-secret
+                key: username
+          - name: DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: mlworks-db-secret
+                key: password
+          - name: DB_NAME
+            valueFrom:
+              secretKeyRef:
+                name: mlworks-db-secret
+                key: database
+          - name: INSTANCE_CONNECTION_NAME
+            valueFrom:
+              secretKeyRef:
+                name: mlworks-db-secret
+                key: instance_connection_name
+          - name: DB_PORT
+            value: "3306"
+          # ML model
+          - name: SERVICE_HOSTNAME
+            valueFrom:
+              secretKeyRef:
+                name: ml-host-secret
+                key: image-retrieval
+          - name: MODEL_NAME
+            valueFrom:
+              secretKeyRef:
+                name: ml-host-secret
+                key: model_name
+          # api host
+          - name: IMAGE_RETRIEVAL_API
+            valueFrom:
+              secretKeyRef:
+                name: api-host-secret
+                key: image-retrieval-api
+          - name: FAISS_API
+            valueFrom:
+              secretKeyRef:
+                name: api-host-secret
+                key: faiss-api
+          # parameters
+          - name: n_img_per_vector
+            value: "100000"
+          - name: gcs_bucket_name
+            value: "image_retrieval"
+          volumeMounts:
+            - name: mlworks-sa-key-volume
+              mountPath: /secrets/
+              readOnly: true
+      volumes:
+      - name: mlworks-sa-key-volume
+        secret:
+          secretName: mlworks-sa-secret

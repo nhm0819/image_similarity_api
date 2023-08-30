@@ -1,0 +1,121 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: image-retrieval-api
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/min-scale: "1"
+        autoscaling.knative.dev/target: "10"
+        autoscaling.knative.dev/scale-down-delay: "15m"
+    spec:
+      containers:
+        - name: image-retrieval-api
+          image: gcr.io/crowdworks-aiml-ops/image-retrieval-api:v4
+          ports:
+            - containerPort: 8000
+          env:
+          # DB
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: mlworks-db-secret
+                key: username
+          - name: DB_PASS
+            valueFrom:
+              secretKeyRef:
+                name: mlworks-db-secret
+                key: password
+          - name: DB_NAME
+            valueFrom:
+              secretKeyRef:
+                name: mlworks-db-secret
+                key: database
+          - name: INSTANCE_CONNECTION_NAME
+            valueFrom:
+              secretKeyRef:
+                name: mlworks-db-secret
+                key: instance_connection_name
+          - name: DB_PORT
+            value: "3306"
+          # ML model
+          - name: SERVICE_HOSTNAME
+            valueFrom:
+              secretKeyRef:
+                name: ml-host-secret
+                key: image-retrieval
+          - name: MODEL_NAME
+            valueFrom:
+              secretKeyRef:
+                name: ml-host-secret
+                key: model_name
+          # api host
+          - name: IMAGE_RETRIEVAL_API
+            valueFrom:
+              secretKeyRef:
+                name: api-host-secret
+                key: image-retrieval-api
+          - name: FAISS_API
+            valueFrom:
+              secretKeyRef:
+                name: api-host-secret
+                key: faiss-api
+          # parameters
+          - name: n_img_per_vector
+            value: "100000"
+          - name: gcs_bucket_name
+            value: "image_retrieval"
+          volumeMounts:
+            - name: mlworks-sa-key-volume
+              mountPath: /secrets/
+              readOnly: true
+#          volumeMounts:
+#            - mountPath: /mnt/image-retrieval/
+#              name: image-retrieval-filestore-volume
+        - name: cloud-sql-proxy
+          # It is recommended to use the latest version of the Cloud SQL Auth Proxy
+          # Make sure to update on a regular schedule!
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest
+          args:
+            # If connecting from a VPC-native GKE cluster, you can use the
+            # following flag to have the proxy connect over private IP
+            # - "--private-ip"
+
+            # Enable structured logging with LogEntry format:
+            - "--structured-logs"
+
+            # Replace DB_PORT with the port the proxy should listen on
+            - "--port=3306"
+            - "crowdworks-aiml-ops:asia-northeast3:cw-mlworks-db"
+
+            # This flag specifies where the service account key can be found
+            - "--credentials-file=/secrets/service_account.json"
+          securityContext:
+            # The default Cloud SQL Auth Proxy image runs as the
+            # "nonroot" user and group (uid: 65532) by default.
+            runAsNonRoot: true
+          volumeMounts:
+            - name: mlworks-sa-key-volume
+              mountPath: /secrets/
+              readOnly: true
+          # Resource configuration depends on an application's requirements. You
+          # should adjust the following values based on what your application
+          # needs. For details, see https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+          resources:
+            requests:
+              # The proxy's memory use scales linearly with the number of active
+              # connections. Fewer open connections will use less memory. Adjust
+              # this value based on your application's requirements.
+              memory: "2Gi"
+              # The proxy's CPU use scales linearly with the amount of IO between
+              # the database and the application. Adjust this value based on your
+              # application's requirements.
+              cpu: "1"
+      volumes:
+      - name: mlworks-sa-key-volume
+        secret:
+          secretName: mlworks-sa-secret
+#      - name: image-retrieval-filestore-volume
+#        persistentVolumeClaim:
+#          claimName: image-retrieval-pvc
