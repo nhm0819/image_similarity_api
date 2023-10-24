@@ -1,4 +1,4 @@
-#FROM tiangolo/uvicorn-gunicorn-fastapi:python3.10
+#FROM tiangolo/uvicorn-gunicorn-fastapi:python3.11
 FROM gcr.io/crowdworks-aiml-ops/image-retrieval-api:v4
 
 # Langauage setting

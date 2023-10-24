@@ -6,7 +6,7 @@ import ujson
 import aiohttp
 import asyncio
 import numpy as np
-import json
+from fastapi import HTTPException, status
 
 
 MODEL_NAME = os.environ["MODEL_NAME"]
@@ -86,6 +86,10 @@ async def inference(session: aiohttp.ClientSession, img: str = None, data_type="
         resp_json = await resp.json()
 
     if int(status) != 200:
+        # raise HTTPException(
+        #     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        #     detail=f"Model Inference Error occurred by {data}",
+        # )
         print("inference response error!")
         return np.zeros(256+1, dtype=np.float32)
 
@@ -181,12 +185,14 @@ def sync_inference(img: str = None, data_type="gcs_url"):
 
 
 
-async def search(session: aiohttp.ClientSession, url: str, query: list, filter_ids: list, radius: float):
+async def search(session: aiohttp.ClientSession, url: str, query: list, filter_ids: list, k: int, limit: int, radius: float):
     st = time.time()
 
     # similarity search
     search_req_dict = {"query": query,
                        "filter_ids": filter_ids,
+                       "k": k,
+                       "limit": limit,
                        "radius": radius}
 
     async with session.post(url=url, json=search_req_dict, timeout=aiohttp.ClientTimeout(total=60*5)) as resp:
@@ -197,10 +203,10 @@ async def search(session: aiohttp.ClientSession, url: str, query: list, filter_i
     return resp_json
 
 
-async def faiss_search(url: str, query: list, filter_ids: list, radius: float):
+async def faiss_search(url: str, query: list, filter_ids: list, k: int, limit: int, radius: float):
     start = time.time()
     async with aiohttp.ClientSession(json_serialize=ujson.dumps) as session:
-        resp = await search(session, url=url, query=query, filter_ids=filter_ids, radius=radius)
+        resp = await search(session, url=url, query=query, filter_ids=filter_ids, k=k, limit=limit, radius=radius)
 
     print(resp)
     end = time.time()

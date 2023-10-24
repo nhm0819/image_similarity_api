@@ -34,7 +34,8 @@ class Faiss(object):
         # image retrieval api
         self.image_retrieval_api = os.environ["IMAGE_RETRIEVAL_API"]
         self.image_retrieval_api_url = f"http://{self.image_retrieval_api}"
-        _ = self.add_db_vectors()
+        add_db_vectors_res = self.add_db_vectors()
+        print(*add_db_vectors_res, sep='\n')
 
         self.state = "healthy"
         print("ready on Faiss API")
@@ -87,11 +88,16 @@ class Faiss(object):
 
         res_list = []
         for image_dict in images_dict:
+            img_url = image_dict["img_url"]
             img_id = image_dict["img_id"]
             vec_url = image_dict["vec_url"]
-            res_list.append(self.add_vector(vec_url, img_id))
+            try:
+                _ = self.add_vector(vec_url, img_id)
+                res_list.append({img_url: True})
+            except:
+                res_list.append({img_url: False})
 
-        return json.dumps(res_list)
+        return res_list
 
     def add_vector(self, vec_url: str, img_id: int): # start_img_id: int, end_img_id: int
         start_time = time.time()
@@ -114,17 +120,16 @@ class Faiss(object):
 
         end_time = time.time()
         print("reading new references time :", end_time - start_time)
-
         return [{id: True} for id in img_id.tolist()]
 
     def remove_vectors(self, img_ids: np.ndarray):
         n_removed = self.index_map.remove_ids(np.array(img_ids, dtype='int64'))
         return {"n_removed": n_removed}
 
-    def search(self, query: np.ndarray, filter_ids: list = [], k: int = 0, radius: float = 0.3):
+    def search(self, query: np.ndarray, filter_ids: list = [], k: int = 0, radius: float = 0.3, limit: int = 0):
         """
         :param query: shape=(N, 256)
-        :param filter_ids: filter id range like [start_id_1, end_id_1, start_id_2, end_id_2, ...]
+        :param filter_ids
         :param k: num of vectors to search
         :param radius: neighbors range to search
         :return: distances: shape=(N, k)
@@ -140,6 +145,8 @@ class Faiss(object):
             lims = [i * k for i in range(query.shape[0] + 1)]
         else:
             lims, D, I = self.index_map.range_search(query, radius)
+
+
 
         # filter indexes by filter_ids
         print("filter :", filter_ids)
@@ -164,16 +171,26 @@ class Faiss(object):
         I_filtered = I * filter
 
         print("I :", I)
-        print("I_filtered :", I_filtered)
         print("filter_array :", filter)
         distances, distances_img_ids = [], []
         for i in range(len(lims)-1):
             distances_ = D[lims[i]:lims[i+1]]
-            distance_ids_ = I_filtered[lims[i]:lims[i + 1]]
-            filter_ids = np.where(distance_ids_ != 0)[0]
+            distances_ids_ = I_filtered[lims[i]:lims[i + 1]]
+            filter_ = np.where(distances_ids_ != 0)[0]
 
-            distances.append(distances_[filter_ids].tolist())
-            distances_img_ids.append(distance_ids_[filter_ids].tolist())
+            distances_filtered = distances_[filter_]
+            distances_ids_filtered = distances_ids_[filter_]
+
+            distances_sorted = np.sort(distances_filtered)
+            distances_ids_sorted = distances_ids_filtered[np.argsort(distances_filtered)]
+
+            if limit != 0:
+                if len(distances_sorted) > limit:
+                    distances_sorted = distances_sorted[:limit]
+                    distances_ids_sorted = distances_ids_sorted[:limit]
+
+            distances.append(distances_sorted.tolist())
+            distances_img_ids.append(distances_ids_sorted.tolist())
 
         return distances, distances_img_ids
 
@@ -217,11 +234,12 @@ if __name__ == "__main__":
     # query = vec[:3]
     idselector = faiss.IDSelectorRange(1, 2)
     i = 1
-    query = npz[:i]
-    lims, D, I = index_map.range_search(query, 10)
+    # query = npz[:i]
+    query = np.random.normal(0, 0.1, (1,256))
+    lims, D, I = index_map.range_search(query, 5)
 
     # filter indexes by filter_ids
-    filter_ids = [1,10]
+    filter_ids = [i for i in range(10000)]
     print("filter :", filter_ids)
     if len(filter_ids) > 1:
         filter = np.zeros_like(I)

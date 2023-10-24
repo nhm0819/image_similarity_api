@@ -6,6 +6,7 @@ class SimilaritySearchInput(BaseModel):
     query: list
     filter_ids: list[int]
     k: Optional[int]
+    limit: Optional[int] | None = 0
     radius: float | None = 0.3
 
 

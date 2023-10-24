@@ -1,5 +1,5 @@
 # fastapi
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -160,7 +160,8 @@ async def similarity_search(search_input: schemas.SearchGCSInput, db: AsyncSessi
 
     gcs_url_list = search_input.gcs_url_list
     proj_id = search_input.proj_id
-    # k = search_input.k
+    k = search_input.k
+    limit = search_input.limit
     radius = search_input.radius
 
     # image to vector
@@ -177,7 +178,10 @@ async def similarity_search(search_input: schemas.SearchGCSInput, db: AsyncSessi
         if img_id is not None:
             filter_ids.append(img_id)
         else:
-            print(f"Filter Erorr : {filter_url} doesn't exist")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Filter Error : {filter_url} doesn't exist",
+            )
 
     # # similarity search
     # search_req_dict = {"query": npz[:, 1:].tolist(),
@@ -190,6 +194,8 @@ async def similarity_search(search_input: schemas.SearchGCSInput, db: AsyncSessi
     resp_json = await faiss_search(url=f"{FAISS_URL}/similarity_search",
                                    query=npz[:, 1:].tolist(),
                                    filter_ids=filter_ids,
+                                   k=k,
+                                   limit=limit,
                                    radius=radius)
     print("resp_json : ", resp_json)
     # images = await db.query(sql_models.Image).all()
@@ -202,6 +208,8 @@ async def similarity_search(search_input: schemas.SearchGCSInput, db: AsyncSessi
             print(imgurl)
             img_url.append(imgurl)
         resp_json["img_urls"].append(img_url)
+
+    resp_json["success"] = np.array(npz[:,0], dtype=bool).tolist()
 
     print(resp_json)
 
@@ -473,6 +481,10 @@ async def add_img_file(add_img_file_input: schemas.AddImgFileInput,
     inference_status = True
     if npz[0, 0] == 0:
         inference_status = False
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Model Inference Error",
+        )
 
     # vector file save to numpy array
     split_path = img_url.split('/')
@@ -550,7 +562,8 @@ async def add_img_file(add_img_file_input: schemas.AddImgFileInput,
     image_model.reference_status = reference_status
     await db.commit()
 
-    resp_json = {"img_id": img_id, "img_url": img_url, "vec_url": vec_url, "requests_status": inference_status}
+    resp_json = {"img_id": img_id, "img_url": img_url, "vec_url": vec_url, "requests_status": inference_status,
+                 "reference_status": reference_status}
     resp_json = jsonable_encoder(resp_json)
     return JSONResponse(resp_json)
 

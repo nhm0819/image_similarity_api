@@ -75,7 +75,8 @@ class SearchGCSInput(BaseModel):
     proj_id: int | None = -1
     # filter_ids: list[int]
     filter_url_list: list[str]
-    # k: Optional[int]
+    k: Optional[int] | None = 0
+    limit: Optional[int] | None = 0
     radius: Optional[float] | None = 0.3
     requester_name: Optional[str]
 

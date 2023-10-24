@@ -28,10 +28,11 @@ def similarity_search(item: SimilaritySearchInput):
     start_time = time.time()
     query = np.array(item.query, dtype=np.float32)
     k = item.k if item.k is not None else 0
+    limit = item.limit if item.limit is not None else 0
     radius = item.radius
     filter_ids = item.filter_ids
 
-    distances, distances_img_ids = faiss.search(query=query, k=k, radius=radius, filter_ids=filter_ids)
+    distances, distances_img_ids = faiss.search(query=query, k=k, radius=radius, limit=limit, filter_ids=filter_ids)
     print("search time(s) :", time.time()-start_time)
     resp_content = {"distances": distances,
                     "distances_img_ids": distances_img_ids,
